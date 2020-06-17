@@ -7,11 +7,7 @@ edition = "2018"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-crazyradio = "^0.1.2"
+crazyradio = "0.1.2"
 zmq = { version = "0.9.2", features = ["vendored"] }
 serde_json = "1.0"
 serde = { version = "1.0", features = ["derive"] }
-# jsonrpc-core = "14.2.0"
-# jsonrpc-derive = "14.2.0"
-# jsonrpc-core-client = "14.2.0"
-easy-jsonrpc = "0.5.3"

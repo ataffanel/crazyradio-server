@@ -1,4 +1,5 @@
 mod crazyradio_server;
+mod jsonrpc_types;
 
 use core::fmt::Display;
 use crazyradio::{Crazyradio, Channel};
