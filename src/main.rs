@@ -1,6 +1,9 @@
+mod crazyradio_server;
+
 use core::fmt::Display;
 use crazyradio::{Crazyradio, Channel};
 use serde::{Deserialize, Serialize};
+use crate::crazyradio_server::CrazyradioServer;
 
 #[derive(Serialize, Deserialize, Debug)]
 struct Request {
@@ -84,15 +87,15 @@ fn main()  -> Result<(), Error> {
     println!("Openning Crazyradio ...");
     let mut cr: Crazyradio = Crazyradio::open_first()?;
 
-    let cmd = Request {
-        version: "1".to_string(),
-        command: Command::Scan{
-            start: 0,
-            stop: 125,
-            message: vec![0xff],
-        }
-    };
-    dbg!(serde_json::to_string(&cmd).unwrap());
+    // let cmd = Request {
+    //     version: "1".to_string(),
+    //     command: Command::Scan{
+    //         start: 0,
+    //         stop: 125,
+    //         message: vec![0xff],
+    //     }
+    // };
+    // dbg!(serde_json::to_string(&cmd).unwrap());
 
     println!("Opened Crazyradio with serial number {}", cr.serial()?);
 
@@ -103,19 +106,24 @@ fn main()  -> Result<(), Error> {
         .bind("tcp://*:7777")
         .expect("failed listenning on tcp://*:7777");
     
-    println!("Entering main loop ...");
-    loop {
-        let request = socket.recv_string(0).unwrap().unwrap();
-        let request: Request = serde_json::from_str(&request).unwrap();
+    let mut server = CrazyradioServer::new(cr);
+    server.run();
 
-        let ret = run_command(&mut cr, request.command)
-                      .unwrap_or_else(|e| Ret::Error{reason: e.to_string()});
+    Ok(())
 
-        let response = Response {
-            version: "1".to_string(),
-            ret
-        };
-        socket.send(&serde_json::to_string(&response).unwrap(), 0).unwrap();
+    // println!("Entering main loop ...");
+    // loop {
+    //     let request = socket.recv_string(0).unwrap().unwrap();
+    //     let request: Request = serde_json::from_str(&request).unwrap();
+
+    //     let ret = run_command(&mut cr, request.command)
+    //                   .unwrap_or_else(|e| Ret::Error{reason: e.to_string()});
+
+    //     let response = Response {
+    //         version: "1".to_string(),
+    //         ret
+    //     };
+    //     socket.send(&serde_json::to_string(&response).unwrap(), 0).unwrap();
         
-    }
+    // }
 }
