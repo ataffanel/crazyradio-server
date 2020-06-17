@@ -1,11 +1,20 @@
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-#[serde(tag = "method", content="params")]
+#[serde(tag = "method", content = "params")]
 pub enum Methods {
-    Hello,
-    SendPacket{channel: u8, packet: Vec<u8>},
+    GetVersion,
+    Scan { start: u8, stop: u8, payload: Vec<u8> },
+    SendPacket { channel: u8, payload: Vec<u8> },
+}
+
+#[derive(Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum Results {
+    GetVersion(String),
+    Scan { found: Vec<u8> },
+    SendPacket { acked: bool, payload: Vec<u8> },
 }
 
 #[derive(Serialize, Deserialize)]
@@ -25,19 +34,10 @@ pub struct Request {
 }
 
 #[derive(Serialize, Deserialize)]
-#[serde(untagged)]
-pub enum Result {
-    Hello(String),
-    SendPacket{acked: bool, payload: Vec<u8>},
-}
-
-#[derive(Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub enum ResponseBody {
-    Result(Result),
-    Error {
-        code: i64,
-        message: String,
-    },
+    Result(Results),
+    Error { code: i64, message: String },
 }
 
 #[derive(Serialize, Deserialize)]
@@ -45,5 +45,5 @@ pub struct Response {
     pub jsonrpc: String,
     #[serde(flatten)]
     pub body: ResponseBody,
-    pub id: Option<Id>
+    pub id: Option<Id>,
 }
