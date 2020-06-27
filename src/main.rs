@@ -1,12 +1,13 @@
 mod crazyradio_server;
-mod jsonrpc_types;
 mod error;
+mod jsonrpc_types;
+mod radio_thread;
 
 use crate::crazyradio_server::CrazyradioServer;
+use crate::error::Result;
 use crazyradio::Crazyradio;
-use crate::error::Error;
 
-fn main() -> Result<(), Error> {
+fn main() -> Result<()> {
     println!("Openning Crazyradio ...");
     let cr: Crazyradio = Crazyradio::open_first()?;
 

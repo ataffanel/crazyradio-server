@@ -5,8 +5,15 @@ use serde::{Deserialize, Serialize};
 #[serde(tag = "method", content = "params")]
 pub enum Methods {
     GetVersion,
-    Scan { start: u8, stop: u8, payload: Vec<u8> },
-    SendPacket { channel: u8, payload: Vec<u8> },
+    Scan {
+        start: u8,
+        stop: u8,
+        payload: Vec<u8>,
+    },
+    SendPacket {
+        channel: u8,
+        payload: Vec<u8>,
+    },
 }
 
 #[derive(Serialize, Deserialize)]
