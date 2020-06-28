@@ -2,21 +2,17 @@
 
 use crate::error::Result;
 use crate::jsonrpc_types::{Methods, Request, Response, ResponseBody, Results};
-use crate::radio_thread::{radio_loop, RadioCommand, ScanResult, SendPacketResult};
 use crazyradio::{Channel, Crazyradio};
-use crossbeam_channel::{unbounded, Receiver, Sender};
+use crate::radio_thread::RadioThread;
 
 pub struct CrazyradioServer {
     socket: zmq::Socket,
-    radio_cmd: Sender<RadioCommand>,
-    scan_res_sender: Sender<Result<ScanResult>>,
-    scan_res: Receiver<Result<ScanResult>>,
-    send_packet_res_sender: Sender<Result<SendPacketResult>>,
-    send_packet_res: Receiver<Result<SendPacketResult>>,
+    radio: RadioThread,
 }
 
 impl CrazyradioServer {
     pub fn new(crazyradio: Crazyradio, context: zmq::Context, port: u32) -> Self {
+        // Create and bind ZMQ socket
         let socket = context.socket(zmq::REP).unwrap();
         let listenning_uri = format!("tcp://*:{}", port);
         socket
@@ -24,21 +20,11 @@ impl CrazyradioServer {
             .expect(&format!("failed listenning on {}", listenning_uri));
 
         // Launch radio thread
-        let (radio_cmd, radio_cmd_receiver) = unbounded();
-        std::thread::spawn(move || {
-            radio_loop(crazyradio, radio_cmd_receiver);
-        });
-
-        let (scan_res_sender, scan_res) = unbounded();
-        let (send_packet_res_sender, send_packet_res) = unbounded();
-
+        let radio = RadioThread::new(crazyradio);
+        
         CrazyradioServer {
             socket,
-            radio_cmd,
-            scan_res_sender,
-            scan_res,
-            send_packet_res_sender,
-            send_packet_res,
+            radio,
         }
     }
 
@@ -63,33 +49,18 @@ impl CrazyradioServer {
                 stop,
                 payload,
             } => {
-                self.radio_cmd
-                    .send(RadioCommand::Scan {
-                        client: self.scan_res_sender.clone(),
-                        start: Channel::from_number(start).unwrap(),
-                        stop: Channel::from_number(stop).unwrap(),
-                        payload: payload,
-                    })
-                    .unwrap();
-
-                let result = self.scan_res.recv().unwrap()?;
+                let result = self.radio.scan(Channel::from_number(start).unwrap(), Channel::from_number(stop).unwrap(), payload)?;
 
                 Results::Scan {
-                    found: result.found,
+                    found: result.into_iter().map(|ch| ch.into()).collect(),
                 }
             }
             Methods::SendPacket { channel, payload } => {
-                self.radio_cmd.send(RadioCommand::SendPacket {
-                    client: self.send_packet_res_sender.clone(),
-                    channel: Channel::from_number(channel).unwrap(),
-                    payload: payload,
-                }).unwrap();
-
-                let result = self.send_packet_res.recv().unwrap()?;
+                let (ack, payload) = self.radio.send_packet(Channel::from_number(channel).unwrap(), payload)?;
 
                 Results::SendPacket {
-                    acked: result.acked,
-                    payload: result.payload,
+                    acked: ack.received,
+                    payload: payload,
                 }
             }
         };
