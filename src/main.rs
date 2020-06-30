@@ -1,3 +1,4 @@
+mod connection;
 mod crazyradio_server;
 mod error;
 mod jsonrpc_types;

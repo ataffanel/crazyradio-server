@@ -1,13 +1,16 @@
 #![allow(bare_trait_objects)]
 
+use crate::connection::{Connection, ConnectionStatus};
 use crate::error::Result;
 use crate::jsonrpc_types::{Methods, Request, Response, ResponseBody, Results};
-use crazyradio::{Channel, Crazyradio};
 use crate::radio_thread::RadioThread;
+use crazyradio::{Channel, Crazyradio};
+use std::collections::HashMap;
 
 pub struct CrazyradioServer {
     socket: zmq::Socket,
     radio: RadioThread,
+    connections: HashMap<Channel, Connection>,
 }
 
 impl CrazyradioServer {
@@ -21,10 +24,14 @@ impl CrazyradioServer {
 
         // Launch radio thread
         let radio = RadioThread::new(crazyradio);
-        
+
+        // No connections for now
+        let connections = HashMap::new();
+
         CrazyradioServer {
             socket,
             radio,
+            connections,
         }
     }
 
@@ -49,20 +56,62 @@ impl CrazyradioServer {
                 stop,
                 payload,
             } => {
-                let result = self.radio.scan(Channel::from_number(start).unwrap(), Channel::from_number(stop).unwrap(), payload)?;
+                let result = self.radio.scan(
+                    Channel::from_number(start)?,
+                    Channel::from_number(stop)?,
+                    payload,
+                )?;
 
                 Results::Scan {
                     found: result.into_iter().map(|ch| ch.into()).collect(),
                 }
             }
             Methods::SendPacket { channel, payload } => {
-                let (ack, payload) = self.radio.send_packet(Channel::from_number(channel).unwrap(), payload)?;
+                let (ack, payload) = self
+                    .radio
+                    .send_packet(Channel::from_number(channel)?, payload)?;
 
                 Results::SendPacket {
                     acked: ack.received,
                     payload: payload,
                 }
             }
+            Methods::Connect { channel } => {
+                let channel = Channel::from_number(channel)?;
+
+                let connection = Connection::new(self.radio.clone(), channel);
+
+                std::thread::sleep(std::time::Duration::from_millis(1000));
+
+                let (connected, status) = match connection.status() {
+                    ConnectionStatus::Connecting => (false, "Connecting".to_string()),
+                    ConnectionStatus::Connected => (true, "Connected".to_string()),
+                    ConnectionStatus::Disconnected(message) => {
+                        (false, format!("Disconnected: {}", message))
+                    }
+                };
+
+                Results::Connect { connected, status }
+            },
+            Methods::GetConnectionStatus { channel } => {
+                let channel = Channel::from_number(channel)?;
+                if let Some(connection) = self.connections.get(&channel) {
+                    let (connected, status) = match connection.status() {
+                        ConnectionStatus::Connecting => (false, "Connecting".to_string()),
+                        ConnectionStatus::Connected => (true, "Connected".to_string()),
+                        ConnectionStatus::Disconnected(message) => {
+                            (false, format!("Disconnected: {}", message))
+                        }
+                    };
+    
+                    Results::Connect { connected, status }
+                } else {
+                    let channel: u8 = channel.into();
+                    return Err(crate::error::Error::ArgumentError(
+                        format!("Connection does not exist for channel {}", channel)
+                    ));
+                }                
+            },
         };
 
         Ok(result)

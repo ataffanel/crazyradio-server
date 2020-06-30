@@ -1,37 +1,37 @@
 use crate::error::Result;
 use crazyradio::{Channel, Crazyradio};
-use crossbeam_channel::{Receiver, Sender, unbounded, bounded};
+use crossbeam_channel::{bounded, unbounded, Receiver, Sender};
 
 /// Multi-user threaded Crazyradio
-/// 
+///
 /// Runs the radio USB communication in a thread and
 /// allows other threads to send/receiver packets and scan.
-/// 
+///
 /// When created, this object takes ownership of the radio.
 /// To allow more user of the radio, simply clone the RadioThread
 /// object. When the last RadioThread is dropped, the communication
 /// thread is stopped and the radio object is dropped which
 /// closes the USB connection.
-/// 
+///
 /// Usage example:
 /// ``` no_run
 /// let radio = crazyradio::Crazyradio::open_first();
 /// let radio_thread = RadioThread(radio);
-/// 
+///
 /// let radio_thread2 = radio_thread.clone();
-/// 
+///
 /// std::thread::spawn(move || {
 ///     loop {
 ///         radio_thread2.send_packet(Channel::from_number(42).unwrap(), vec![0xff]);
 ///         std::thread::sleep(Duration::from_millis(333))
 ///     }
 /// });
-/// 
+///
 /// loop {
 ///     radio_thread.send_packet(Channel::from_number(42).unwrap(), vec![0xff]);
 ///     std::thread::sleep(Duration::from_millis(500))
 /// }
-/// 
+///
 pub struct RadioThread {
     radio_command: Sender<RadioCommand>,
     send_packet_res_send: Sender<Result<SendPacketResult>>,
@@ -75,7 +75,11 @@ impl RadioThread {
         Ok(result.found)
     }
 
-    pub fn send_packet(&self, channel: Channel, payload: Vec<u8>) -> Result<(crazyradio::Ack, Vec<u8>)> {
+    pub fn send_packet(
+        &self,
+        channel: Channel,
+        payload: Vec<u8>,
+    ) -> Result<(crazyradio::Ack, Vec<u8>)> {
         self.radio_command
             .send(RadioCommand::SendPacket {
                 client: self.send_packet_res_send.clone(),
@@ -86,12 +90,15 @@ impl RadioThread {
 
         let result = self.send_packet_res.recv().unwrap()?;
 
-        Ok((crazyradio::Ack {
-            received: result.acked,
-            length: result.payload.len(),
-            power_detector: false,
-            retry: 0,
-        }, result.payload))
+        Ok((
+            crazyradio::Ack {
+                received: result.acked,
+                length: result.payload.len(),
+                power_detector: false,
+                retry: 0,
+            },
+            result.payload,
+        ))
     }
 }
 
@@ -113,7 +120,6 @@ impl Clone for RadioThread {
         }
     }
 }
-
 
 enum RadioCommand {
     SendPacket {

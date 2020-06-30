@@ -14,6 +14,12 @@ pub enum Methods {
         channel: u8,
         payload: Vec<u8>,
     },
+    Connect {
+        channel: u8,
+    },
+    GetConnectionStatus {
+        channel: u8,
+    },
 }
 
 #[derive(Serialize, Deserialize)]
@@ -22,6 +28,8 @@ pub enum Results {
     GetVersion(String),
     Scan { found: Vec<u8> },
     SendPacket { acked: bool, payload: Vec<u8> },
+    Connect { connected: bool, status: String },
+    GetConnectionStatus { connected: bool, status: String },
 }
 
 #[derive(Serialize, Deserialize)]

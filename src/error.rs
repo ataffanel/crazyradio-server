@@ -6,6 +6,8 @@ pub type Result<T> = std::result::Result<T, Error>;
 pub enum Error {
     DeserializeError(serde_json::Error),
     CrazyradioError(crazyradio::Error),
+    ZmqError(zmq::Error),
+    ArgumentError(String),
 }
 
 impl Display for Error {
@@ -23,5 +25,11 @@ impl From<serde_json::Error> for Error {
 impl From<crazyradio::Error> for Error {
     fn from(error: crazyradio::Error) -> Self {
         Error::CrazyradioError(error)
+    }
+}
+
+impl From<zmq::Error> for Error {
+    fn from(error: zmq::Error) -> Self {
+        Error::ZmqError(error)
     }
 }
