@@ -81,8 +81,6 @@ impl CrazyradioServer {
 
                 let connection = Connection::new(self.radio.clone(), channel);
 
-                std::thread::sleep(std::time::Duration::from_millis(1000));
-
                 let (connected, status) = match connection.status() {
                     ConnectionStatus::Connecting => (false, "Connecting".to_string()),
                     ConnectionStatus::Connected => (true, "Connected".to_string()),

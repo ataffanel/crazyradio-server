@@ -5,6 +5,7 @@ use std::sync::Arc;
 use std::sync::RwLock;
 use std::time;
 use crate::error::Result;
+use crossbeam_utils::sync::WaitGroup;
 
 #[derive(Clone, Debug)]
 pub enum ConnectionStatus {
@@ -30,14 +31,20 @@ impl Connection {
         socket_push.bind("tcp://*:7700").unwrap();
         socker_pull.bind("tcp://*:7701").unwrap();
 
+        let connection_initialized = WaitGroup::new();
 
+
+        let ci = connection_initialized.clone();
         let mut thread = ConnectionThread::new(radio, status.clone(), socket_push, socker_pull, channel);
         std::thread::spawn(move || {
-            match thread.run() {
+            match thread.run(ci) {
                 Err(e) => thread.update_status(ConnectionStatus::Disconnected(format!("Connection error: {}", e))),
                 _ => {},
             }
         });
+
+        // Wait for, either, the connection being established or failed initialization
+        connection_initialized.wait();
 
         Connection { status }
     }
@@ -111,7 +118,7 @@ impl ConnectionThread {
         Ok((ack, ack_payload))
     }
 
-    fn run(&mut self) -> Result<()> {
+    fn run(&mut self, connection_initialized: WaitGroup) -> Result<()> {
         // Try to initialize safelink
         // This server only supports safelink, if it cannot be enabled
         // the Crazyflie is deemed not connectable
@@ -124,6 +131,7 @@ impl ConnectionThread {
 
         // Safelink is initialized, we are connected!
         self.update_status(ConnectionStatus::Connected);
+        drop(connection_initialized);
 
         // Wait for push connection to be active?
         self.socket_push.send(vec![0xff], 0)?;
