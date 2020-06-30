@@ -90,7 +90,7 @@ impl CrazyradioServer {
                 };
 
                 Results::Connect { connected, status }
-            },
+            }
             Methods::GetConnectionStatus { channel } => {
                 let channel = Channel::from_number(channel)?;
                 if let Some(connection) = self.connections.get(&channel) {
@@ -101,15 +101,16 @@ impl CrazyradioServer {
                             (false, format!("Disconnected: {}", message))
                         }
                     };
-    
+
                     Results::Connect { connected, status }
                 } else {
                     let channel: u8 = channel.into();
-                    return Err(crate::error::Error::ArgumentError(
-                        format!("Connection does not exist for channel {}", channel)
-                    ));
-                }                
-            },
+                    return Err(crate::error::Error::ArgumentError(format!(
+                        "Connection does not exist for channel {}",
+                        channel
+                    )));
+                }
+            }
         };
 
         Ok(result)

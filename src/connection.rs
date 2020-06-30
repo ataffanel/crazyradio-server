@@ -1,11 +1,11 @@
 // Connection handling code
+use crate::error::Result;
 use crate::radio_thread::RadioThread;
 use crazyradio::Channel;
+use crossbeam_utils::sync::WaitGroup;
 use std::sync::Arc;
 use std::sync::RwLock;
 use std::time;
-use crate::error::Result;
-use crossbeam_utils::sync::WaitGroup;
 
 #[derive(Clone, Debug)]
 pub enum ConnectionStatus {
@@ -33,14 +33,15 @@ impl Connection {
 
         let connection_initialized = WaitGroup::new();
 
-
         let ci = connection_initialized.clone();
-        let mut thread = ConnectionThread::new(radio, status.clone(), socket_push, socker_pull, channel);
-        std::thread::spawn(move || {
-            match thread.run(ci) {
-                Err(e) => thread.update_status(ConnectionStatus::Disconnected(format!("Connection error: {}", e))),
-                _ => {},
-            }
+        let mut thread =
+            ConnectionThread::new(radio, status.clone(), socket_push, socker_pull, channel);
+        std::thread::spawn(move || match thread.run(ci) {
+            Err(e) => thread.update_status(ConnectionStatus::Disconnected(format!(
+                "Connection error: {}",
+                e
+            ))),
+            _ => {}
         });
 
         // Wait for, either, the connection being established or failed initialization
@@ -65,12 +66,21 @@ struct ConnectionThread {
 }
 
 impl ConnectionThread {
-    fn new(radio: RadioThread, status: Arc<RwLock<ConnectionStatus>>, socket_push: zmq::Socket, socket_pull: zmq::Socket, channel: Channel) -> Self {
+    fn new(
+        radio: RadioThread,
+        status: Arc<RwLock<ConnectionStatus>>,
+        socket_push: zmq::Socket,
+        socket_pull: zmq::Socket,
+        channel: Channel,
+    ) -> Self {
         ConnectionThread {
-            radio, status,
+            radio,
+            status,
             safelink_up_ctr: 0,
             safelink_down_ctr: 0,
-            socket_push, socket_pull, channel,
+            socket_push,
+            socket_pull,
+            channel,
         }
     }
 
@@ -83,7 +93,9 @@ impl ConnectionThread {
     fn enable_safelink(&mut self) -> Result<bool> {
         // Tying 10 times to reset safelink
         for _ in 0..10 {
-            let (ack, payload) = self.radio.send_packet(self.channel, vec![0xff, 0x05, 0x01])?;
+            let (ack, payload) = self
+                .radio
+                .send_packet(self.channel, vec![0xff, 0x05, 0x01])?;
 
             if ack.received && payload == [0xff, 0x05, 0x01] {
                 self.safelink_down_ctr = 0;
@@ -103,7 +115,6 @@ impl ConnectionThread {
 
         let (ack, ack_payload) = self.radio.send_packet(self.channel, packet)?;
 
-        
         if ack.received && ack_payload.len() > 0 {
             let received_down_ctr = (ack_payload[0] & 0x40) >> 2;
             if received_down_ctr == self.safelink_down_ctr {
@@ -145,11 +156,11 @@ impl ConnectionThread {
         while last_pk_time.elapsed() < time::Duration::from_millis(1000) {
             if !needs_resend {
                 packet = match self.socket_pull.poll(zmq::POLLIN, relax_timeout_ms)? {
-                    0 => vec![0xff],  // NULL packet
+                    0 => vec![0xff], // NULL packet
                     _ => self.socket_pull.recv_bytes(0)?,
                 };
             }
-            
+
             let (ack, ack_payload) = self.send_packet_safe(packet.clone())?;
 
             if ack.received {
