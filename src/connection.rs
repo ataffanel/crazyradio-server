@@ -116,7 +116,7 @@ impl ConnectionThread {
         let (ack, ack_payload) = self.radio.send_packet(self.channel, packet)?;
 
         if ack.received && ack_payload.len() > 0 {
-            let received_down_ctr = (ack_payload[0] & 0x40) >> 2;
+            let received_down_ctr = (ack_payload[0] & 0x04) >> 2;
             if received_down_ctr == self.safelink_down_ctr {
                 self.safelink_down_ctr = 1 - self.safelink_down_ctr;
             }
@@ -146,7 +146,6 @@ impl ConnectionThread {
 
         // Wait for push connection to be active?
         self.socket_push.send(vec![0xff], 0)?;
-        println!("Push socker connected?");
 
         // Communication loop ...
         let mut last_pk_time = time::Instant::now();
@@ -161,7 +160,7 @@ impl ConnectionThread {
                 };
             }
 
-            let (ack, ack_payload) = self.send_packet_safe(packet.clone())?;
+            let (ack, mut ack_payload) = self.send_packet_safe(packet.clone())?;
 
             if ack.received {
                 last_pk_time = time::Instant::now();
@@ -171,6 +170,7 @@ impl ConnectionThread {
                 // We may want to be a bit more clever there (ie. increasing the time by
                 // small increment instead of this all-or-nothing aproach)
                 if ack_payload.len() > 0 && (ack_payload[0] & 0xF3) != 0xF3 {
+                    ack_payload[0] &= 0xF3;
                     self.socket_push.send(&ack_payload, 0)?;
                     relax_timeout_ms = 0;
                 } else {
