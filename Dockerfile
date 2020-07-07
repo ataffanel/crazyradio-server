@@ -1,18 +1,15 @@
-FROM rust:1.44.1-alpine3.12 AS builder
+FROM rust:1.44.1
 
 WORKDIR /data
 
-RUN apk add cmake make g++ linux-headers
-RUN rustup target add x86_64-unknown-linux-gnu
+RUN apt-get update && apt-get install -y cmake
 
 COPY Cargo.toml Cargo.lock ./
 COPY src ./src
-RUN cargo build --target x86_64-unknown-linux-gnu --release
+RUN cargo build --release
 
-FROM alpine:3.12
+FROM ubuntu:focal
 
-COPY --from=builder /data/target/x86_64-unknown-linux-gnu/release/crazyradio-server /usr/bin
-
-RUN apk add libstdc++ libgcc
+COPY --from=0 /data/target/release/crazyradio-server /usr/bin
 
 ENTRYPOINT [ "crazyradio-server" ]
