@@ -17,6 +17,7 @@ pub enum ConnectionStatus {
 pub struct Connection {
     status: Arc<RwLock<ConnectionStatus>>,
     disconnect: Arc<ShardedLock<bool>>,
+    thread: std::thread::JoinHandle<()>,
 }
 
 impl Connection {
@@ -43,26 +44,29 @@ impl Connection {
                                   socket_push,
                                   socket_pull,
                                   channel);
-        std::thread::spawn(move || match thread.run(ci) {
+        let thread = std::thread::spawn(move ||
+            match thread.run(ci) {
             Err(e) => thread.update_status(ConnectionStatus::Disconnected(format!(
-                "Connection error: {}",
-                e
-            ))),
+                    "Connection error: {}",
+                    e
+                ))),
             _ => {}
         });
 
         // Wait for, either, the connection being established or failed initialization
         connection_initialized.wait();
 
-        Connection { status, disconnect }
+        Connection { status, disconnect, thread }
     }
 
     pub fn status(&self) -> ConnectionStatus {
         self.status.read().unwrap().clone()
     }
 
-    pub fn disconnect(&self) {
+    pub fn disconnect(self) {
         *self.disconnect.write().unwrap() = true;
+        println!("Closing the connection!");
+        self.thread.join().unwrap();
     }
 }
 
@@ -160,6 +164,7 @@ impl ConnectionThread {
 
         // Wait for push connection to be active?
         self.socket_push.send(vec![0xff], 0)?;
+        self.socket_push.set_sndtimeo(10).unwrap();
 
         // Communication loop ...
         let mut last_pk_time = time::Instant::now();

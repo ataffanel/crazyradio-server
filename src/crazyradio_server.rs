@@ -89,6 +89,8 @@ impl CrazyradioServer {
                     }
                 };
 
+                self.connections.insert(channel, connection);
+
                 Results::Connect { connected, status }
             }
             Methods::GetConnectionStatus { channel } => {
@@ -113,7 +115,7 @@ impl CrazyradioServer {
             }
             Methods::Disconnect { channel } => {
                 let channel = Channel::from_number(channel)?;
-                if let Some(connection) = self.connections.get(&channel) {
+                if let Some(connection) = self.connections.remove(&channel) {
                     connection.disconnect();
 
                     Results::Disconnect
