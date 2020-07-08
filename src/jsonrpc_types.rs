@@ -20,6 +20,9 @@ pub enum Methods {
     GetConnectionStatus {
         channel: u8,
     },
+    Disconnect {
+        channel: u8,
+    }
 }
 
 #[derive(Serialize, Deserialize)]
@@ -30,6 +33,7 @@ pub enum Results {
     SendPacket { acked: bool, payload: Vec<u8> },
     Connect { connected: bool, status: String },
     GetConnectionStatus { connected: bool, status: String },
+    Disconnect,
 }
 
 #[derive(Serialize, Deserialize)]

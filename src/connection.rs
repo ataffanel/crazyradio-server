@@ -2,7 +2,7 @@
 use crate::error::Result;
 use crate::radio_thread::RadioThread;
 use crazyradio::Channel;
-use crossbeam_utils::sync::WaitGroup;
+use crossbeam_utils::sync::{WaitGroup, ShardedLock};
 use std::sync::Arc;
 use std::sync::RwLock;
 use std::time;
@@ -16,26 +16,33 @@ pub enum ConnectionStatus {
 
 pub struct Connection {
     status: Arc<RwLock<ConnectionStatus>>,
+    disconnect: Arc<ShardedLock<bool>>,
 }
 
 impl Connection {
     pub fn new(radio: RadioThread, channel: Channel) -> Connection {
         let status = Arc::new(RwLock::new(ConnectionStatus::Connecting));
+        let disconnect = Arc::new(ShardedLock::new(false));
 
         // Create two ZMQ? socket for sending and receiving raw CRTP packets
         let context = zmq::Context::new();
 
         let socket_push = context.socket(zmq::PUSH).unwrap();
-        let socker_pull = context.socket(zmq::PULL).unwrap();
+        let socket_pull = context.socket(zmq::PULL).unwrap();
 
         socket_push.bind("tcp://*:7700").unwrap();
-        socker_pull.bind("tcp://*:7701").unwrap();
+        socket_pull.bind("tcp://*:7701").unwrap();
 
         let connection_initialized = WaitGroup::new();
 
         let ci = connection_initialized.clone();
         let mut thread =
-            ConnectionThread::new(radio, status.clone(), socket_push, socker_pull, channel);
+            ConnectionThread::new(radio, 
+                                  status.clone(), 
+                                  disconnect.clone(),
+                                  socket_push,
+                                  socket_pull,
+                                  channel);
         std::thread::spawn(move || match thread.run(ci) {
             Err(e) => thread.update_status(ConnectionStatus::Disconnected(format!(
                 "Connection error: {}",
@@ -47,17 +54,22 @@ impl Connection {
         // Wait for, either, the connection being established or failed initialization
         connection_initialized.wait();
 
-        Connection { status }
+        Connection { status, disconnect }
     }
 
     pub fn status(&self) -> ConnectionStatus {
         self.status.read().unwrap().clone()
+    }
+
+    pub fn disconnect(&self) {
+        *self.disconnect.write().unwrap() = true;
     }
 }
 
 struct ConnectionThread {
     radio: RadioThread,
     status: Arc<RwLock<ConnectionStatus>>,
+    disconnect: Arc<ShardedLock<bool>>,
     safelink_up_ctr: u8,
     safelink_down_ctr: u8,
     socket_push: zmq::Socket,
@@ -69,6 +81,7 @@ impl ConnectionThread {
     fn new(
         radio: RadioThread,
         status: Arc<RwLock<ConnectionStatus>>,
+        disconnect: Arc<ShardedLock<bool>>,
         socket_push: zmq::Socket,
         socket_pull: zmq::Socket,
         channel: Channel,
@@ -76,6 +89,7 @@ impl ConnectionThread {
         ConnectionThread {
             radio,
             status,
+            disconnect,
             safelink_up_ctr: 0,
             safelink_down_ctr: 0,
             socket_push,
@@ -179,6 +193,13 @@ impl ConnectionThread {
                 }
             } else {
                 needs_resend = true;
+            }
+
+            if *self.disconnect.read().unwrap() {
+                self.update_status(ConnectionStatus::Disconnected(
+                    "Disconnect requested".to_string(),
+                ));
+                return Ok(())
             }
         }
 
