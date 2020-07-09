@@ -1,13 +1,13 @@
 // Connection handling code
-use crate::error::{Result, Error};
+use crate::error::{Error, Result};
 use crate::radio_thread::RadioThread;
 use crazyradio::Channel;
-use crossbeam_utils::sync::{WaitGroup, ShardedLock};
+use crossbeam_utils::sync::{ShardedLock, WaitGroup};
+use rand;
+use rand::Rng;
 use std::sync::Arc;
 use std::sync::RwLock;
 use std::time;
-use rand;
-use rand::Rng;
 
 #[derive(Clone, Debug)]
 pub enum ConnectionStatus {
@@ -26,7 +26,7 @@ pub struct Connection {
 
 fn bind_zmq_on_random_port(socket: &zmq::Socket) -> Result<u16> {
     let n_try = 10;
-    
+
     for _ in 0..n_try {
         let port = rand::thread_rng().gen_range(49152, 65535);
 
@@ -36,7 +36,9 @@ fn bind_zmq_on_random_port(socket: &zmq::Socket) -> Result<u16> {
         }
     }
 
-    Err(Error::ServerError("Cannot bind TCP port for connection".to_string()))
+    Err(Error::ServerError(
+        "Cannot bind TCP port for connection".to_string(),
+    ))
 }
 
 impl Connection {
@@ -56,20 +58,20 @@ impl Connection {
         let connection_initialized = WaitGroup::new();
 
         let ci = connection_initialized.clone();
-        let mut thread =
-            ConnectionThread::new(radio, 
-                                  status.clone(), 
-                                  disconnect.clone(),
-                                  socket_push,
-                                  socket_pull,
-                                  channel,
-                                  address);
-        let thread = std::thread::spawn(move ||
-            match thread.run(ci) {
+        let mut thread = ConnectionThread::new(
+            radio,
+            status.clone(),
+            disconnect.clone(),
+            socket_push,
+            socket_pull,
+            channel,
+            address,
+        );
+        let thread = std::thread::spawn(move || match thread.run(ci) {
             Err(e) => thread.update_status(ConnectionStatus::Disconnected(format!(
-                    "Connection error: {}",
-                    e
-                ))),
+                "Connection error: {}",
+                e
+            ))),
             _ => {}
         });
 
@@ -144,9 +146,9 @@ impl ConnectionThread {
     fn enable_safelink(&mut self) -> Result<bool> {
         // Tying 10 times to reset safelink
         for _ in 0..10 {
-            let (ack, payload) = self
-                .radio
-                .send_packet(self.channel, self.address, vec![0xff, 0x05, 0x01])?;
+            let (ack, payload) =
+                self.radio
+                    .send_packet(self.channel, self.address, vec![0xff, 0x05, 0x01])?;
 
             if ack.received && payload == [0xff, 0x05, 0x01] {
                 self.safelink_down_ctr = 0;
@@ -237,7 +239,7 @@ impl ConnectionThread {
                 self.update_status(ConnectionStatus::Disconnected(
                     "Disconnect requested".to_string(),
                 ));
-                return Ok(())
+                return Ok(());
             }
         }
 

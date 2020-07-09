@@ -68,10 +68,14 @@ impl CrazyradioServer {
                     found: result.into_iter().map(|ch| ch.into()).collect(),
                 }
             }
-            Methods::SendPacket { channel, address, payload } => {
-                let (ack, payload) = self
-                    .radio
-                    .send_packet(Channel::from_number(channel)?, address, payload)?;
+            Methods::SendPacket {
+                channel,
+                address,
+                payload,
+            } => {
+                let (ack, payload) =
+                    self.radio
+                        .send_packet(Channel::from_number(channel)?, address, payload)?;
 
                 Results::SendPacket {
                     acked: ack.received,
@@ -82,10 +86,10 @@ impl CrazyradioServer {
                 let channel = Channel::from_number(channel)?;
 
                 if let Some(connection) = self.connections.get(&(channel, address)) {
-                    if ! matches!(connection.status(), ConnectionStatus::Disconnected(_)) {
-                        return Err(crate::error::Error::ArgumentError(
-                            format!("Connection already active!")
-                        ))
+                    if !matches!(connection.status(), ConnectionStatus::Disconnected(_)) {
+                        return Err(crate::error::Error::ArgumentError(format!(
+                            "Connection already active!"
+                        )));
                     }
                 }
                 self.connections.remove(&(channel, address));

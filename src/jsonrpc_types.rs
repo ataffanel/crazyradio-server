@@ -32,19 +32,34 @@ pub enum Methods {
         channel: u8,
         #[serde(default = "default_address")]
         address: [u8; 5],
-    }
+    },
 }
 
-fn default_address() -> [u8; 5] { [0xe7; 5] }
+fn default_address() -> [u8; 5] {
+    [0xe7; 5]
+}
 
 #[derive(Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum Results {
     GetVersion(String),
-    Scan { found: Vec<u8> },
-    SendPacket { acked: bool, payload: Vec<u8> },
-    Connect { connected: bool, status: String, push: u16, pull: u16 },
-    GetConnectionStatus { connected: bool, status: String },
+    Scan {
+        found: Vec<u8>,
+    },
+    SendPacket {
+        acked: bool,
+        payload: Vec<u8>,
+    },
+    Connect {
+        connected: bool,
+        status: String,
+        push: u16,
+        pull: u16,
+    },
+    GetConnectionStatus {
+        connected: bool,
+        status: String,
+    },
     Disconnect,
 }
 

@@ -60,7 +60,13 @@ impl RadioThread {
         }
     }
 
-    pub fn scan(&self, start: Channel, stop: Channel, address: [u8; 5], payload: Vec<u8>) -> Result<Vec<Channel>> {
+    pub fn scan(
+        &self,
+        start: Channel,
+        stop: Channel,
+        address: [u8; 5],
+        payload: Vec<u8>,
+    ) -> Result<Vec<Channel>> {
         self.radio_command
             .send(RadioCommand::Scan {
                 client: self.scan_res_send.clone(),
