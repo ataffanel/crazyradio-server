@@ -79,6 +79,15 @@ impl CrazyradioServer {
             Methods::Connect { channel } => {
                 let channel = Channel::from_number(channel)?;
 
+                if let Some(connection) = self.connections.get(&channel) {
+                    if matches!(connection.status(), ConnectionStatus::Disconnected(_)) {
+                        return Err(crate::error::Error::ArgumentError(
+                            format!("Connection already active!")
+                        ))
+                    }
+                }
+                self.connections.remove(&channel);
+
                 let connection = Connection::new(self.radio.clone(), channel);
 
                 let (connected, status) = match connection.status() {
