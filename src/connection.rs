@@ -21,7 +21,7 @@ pub struct Connection {
 }
 
 impl Connection {
-    pub fn new(radio: RadioThread, channel: Channel) -> Connection {
+    pub fn new(radio: RadioThread, channel: Channel, address: [u8; 5]) -> Connection {
         let status = Arc::new(RwLock::new(ConnectionStatus::Connecting));
         let disconnect = Arc::new(ShardedLock::new(false));
 
@@ -43,7 +43,8 @@ impl Connection {
                                   disconnect.clone(),
                                   socket_push,
                                   socket_pull,
-                                  channel);
+                                  channel,
+                                  address);
         let thread = std::thread::spawn(move ||
             match thread.run(ci) {
             Err(e) => thread.update_status(ConnectionStatus::Disconnected(format!(
@@ -79,6 +80,7 @@ struct ConnectionThread {
     socket_push: zmq::Socket,
     socket_pull: zmq::Socket,
     channel: Channel,
+    address: [u8; 5],
 }
 
 impl ConnectionThread {
@@ -89,6 +91,7 @@ impl ConnectionThread {
         socket_push: zmq::Socket,
         socket_pull: zmq::Socket,
         channel: Channel,
+        address: [u8; 5],
     ) -> Self {
         ConnectionThread {
             radio,
@@ -99,6 +102,7 @@ impl ConnectionThread {
             socket_push,
             socket_pull,
             channel,
+            address,
         }
     }
 
@@ -113,7 +117,7 @@ impl ConnectionThread {
         for _ in 0..10 {
             let (ack, payload) = self
                 .radio
-                .send_packet(self.channel, vec![0xff, 0x05, 0x01])?;
+                .send_packet(self.channel, self.address, vec![0xff, 0x05, 0x01])?;
 
             if ack.received && payload == [0xff, 0x05, 0x01] {
                 self.safelink_down_ctr = 0;
@@ -131,7 +135,7 @@ impl ConnectionThread {
         packet[0] &= 0xF3;
         packet[0] |= (self.safelink_up_ctr << 3) | (self.safelink_down_ctr << 2);
 
-        let (ack, ack_payload) = self.radio.send_packet(self.channel, packet)?;
+        let (ack, ack_payload) = self.radio.send_packet(self.channel, self.address, packet)?;
 
         if ack.received && ack_payload.len() > 0 {
             let received_down_ctr = (ack_payload[0] & 0x04) >> 2;

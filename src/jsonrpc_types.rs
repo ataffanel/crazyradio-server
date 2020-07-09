@@ -8,22 +8,34 @@ pub enum Methods {
     Scan {
         start: u8,
         stop: u8,
+        #[serde(default = "default_address")]
+        address: [u8; 5],
         payload: Vec<u8>,
     },
     SendPacket {
         channel: u8,
+        #[serde(default = "default_address")]
+        address: [u8; 5],
         payload: Vec<u8>,
     },
     Connect {
         channel: u8,
+        #[serde(default = "default_address")]
+        address: [u8; 5],
     },
     GetConnectionStatus {
         channel: u8,
+        #[serde(default = "default_address")]
+        address: [u8; 5],
     },
     Disconnect {
         channel: u8,
+        #[serde(default = "default_address")]
+        address: [u8; 5],
     }
 }
+
+fn default_address() -> [u8; 5] { [0xe7; 5] }
 
 #[derive(Serialize, Deserialize)]
 #[serde(untagged)]

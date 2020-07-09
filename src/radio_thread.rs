@@ -60,12 +60,13 @@ impl RadioThread {
         }
     }
 
-    pub fn scan(&self, start: Channel, stop: Channel, payload: Vec<u8>) -> Result<Vec<Channel>> {
+    pub fn scan(&self, start: Channel, stop: Channel, address: [u8; 5], payload: Vec<u8>) -> Result<Vec<Channel>> {
         self.radio_command
             .send(RadioCommand::Scan {
                 client: self.scan_res_send.clone(),
                 start: start,
                 stop: stop,
+                address: address,
                 payload: payload,
             })
             .unwrap();
@@ -78,12 +79,14 @@ impl RadioThread {
     pub fn send_packet(
         &self,
         channel: Channel,
+        address: [u8; 5],
         payload: Vec<u8>,
     ) -> Result<(crazyradio::Ack, Vec<u8>)> {
         self.radio_command
             .send(RadioCommand::SendPacket {
                 client: self.send_packet_res_send.clone(),
                 channel: channel,
+                address: address,
                 payload: payload,
             })
             .unwrap();
@@ -125,12 +128,14 @@ enum RadioCommand {
     SendPacket {
         client: Sender<Result<SendPacketResult>>,
         channel: Channel,
+        address: [u8; 5],
         payload: Vec<u8>,
     },
     Scan {
         client: Sender<Result<ScanResult>>,
         start: Channel,
         stop: Channel,
+        address: [u8; 5],
         payload: Vec<u8>,
     },
 }
@@ -147,8 +152,10 @@ fn scan(
     crazyradio: &mut Crazyradio,
     start: Channel,
     stop: Channel,
+    address: [u8; 5],
     payload: Vec<u8>,
 ) -> Result<ScanResult> {
+    crazyradio.set_address(&address)?;
     let found = crazyradio.scan_channels(start, stop, &payload)?;
 
     return Ok(ScanResult { found });
@@ -157,11 +164,13 @@ fn scan(
 fn send_packet(
     crazyradio: &mut Crazyradio,
     channel: Channel,
+    address: [u8; 5],
     payload: Vec<u8>,
 ) -> Result<SendPacketResult> {
     let mut ack_data = Vec::new();
     ack_data.resize(32, 0);
     crazyradio.set_channel(channel)?;
+    crazyradio.set_address(&address)?;
 
     let ack = crazyradio.send_packet(&payload, &mut ack_data)?;
     ack_data.resize(ack.length, 0);
@@ -180,17 +189,19 @@ fn radio_loop(crazyradio: Crazyradio, radio_cmd: Receiver<RadioCommand>) {
                 client,
                 start,
                 stop,
+                address,
                 payload,
             } => {
-                let res = scan(&mut crazyradio, start, stop, payload);
+                let res = scan(&mut crazyradio, start, stop, address, payload);
                 client.send(res).unwrap();
             }
             RadioCommand::SendPacket {
                 client,
                 channel,
+                address,
                 payload,
             } => {
-                let res = send_packet(&mut crazyradio, channel, payload);
+                let res = send_packet(&mut crazyradio, channel, address, payload);
                 client.send(res).unwrap();
             }
         }

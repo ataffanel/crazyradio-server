@@ -10,7 +10,7 @@ use std::collections::HashMap;
 pub struct CrazyradioServer {
     socket: zmq::Socket,
     radio: RadioThread,
-    connections: HashMap<Channel, Connection>,
+    connections: HashMap<(Channel, [u8; 5]), Connection>,
 }
 
 impl CrazyradioServer {
@@ -54,11 +54,13 @@ impl CrazyradioServer {
             Methods::Scan {
                 start,
                 stop,
+                address,
                 payload,
             } => {
                 let result = self.radio.scan(
                     Channel::from_number(start)?,
                     Channel::from_number(stop)?,
+                    address,
                     payload,
                 )?;
 
@@ -66,29 +68,29 @@ impl CrazyradioServer {
                     found: result.into_iter().map(|ch| ch.into()).collect(),
                 }
             }
-            Methods::SendPacket { channel, payload } => {
+            Methods::SendPacket { channel, address, payload } => {
                 let (ack, payload) = self
                     .radio
-                    .send_packet(Channel::from_number(channel)?, payload)?;
+                    .send_packet(Channel::from_number(channel)?, address, payload)?;
 
                 Results::SendPacket {
                     acked: ack.received,
                     payload: payload,
                 }
             }
-            Methods::Connect { channel } => {
+            Methods::Connect { channel, address } => {
                 let channel = Channel::from_number(channel)?;
 
-                if let Some(connection) = self.connections.get(&channel) {
-                    if matches!(connection.status(), ConnectionStatus::Disconnected(_)) {
+                if let Some(connection) = self.connections.get(&(channel, address)) {
+                    if ! matches!(connection.status(), ConnectionStatus::Disconnected(_)) {
                         return Err(crate::error::Error::ArgumentError(
                             format!("Connection already active!")
                         ))
                     }
                 }
-                self.connections.remove(&channel);
+                self.connections.remove(&(channel, address));
 
-                let connection = Connection::new(self.radio.clone(), channel);
+                let connection = Connection::new(self.radio.clone(), channel, address);
 
                 let (connected, status) = match connection.status() {
                     ConnectionStatus::Connecting => (false, "Connecting".to_string()),
@@ -98,13 +100,13 @@ impl CrazyradioServer {
                     }
                 };
 
-                self.connections.insert(channel, connection);
+                self.connections.insert((channel, address), connection);
 
                 Results::Connect { connected, status }
             }
-            Methods::GetConnectionStatus { channel } => {
+            Methods::GetConnectionStatus { channel, address } => {
                 let channel = Channel::from_number(channel)?;
-                if let Some(connection) = self.connections.get(&channel) {
+                if let Some(connection) = self.connections.get(&(channel, address)) {
                     let (connected, status) = match connection.status() {
                         ConnectionStatus::Connecting => (false, "Connecting".to_string()),
                         ConnectionStatus::Connected => (true, "Connected".to_string()),
@@ -122,9 +124,9 @@ impl CrazyradioServer {
                     )));
                 }
             }
-            Methods::Disconnect { channel } => {
+            Methods::Disconnect { channel, address } => {
                 let channel = Channel::from_number(channel)?;
-                if let Some(connection) = self.connections.remove(&channel) {
+                if let Some(connection) = self.connections.remove(&(channel, address)) {
                     connection.disconnect();
 
                     Results::Disconnect
