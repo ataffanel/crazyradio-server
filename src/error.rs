@@ -8,6 +8,7 @@ pub enum Error {
     CrazyradioError(crazyradio::Error),
     ZmqError(zmq::Error),
     ArgumentError(String),
+    ServerError(String),
 }
 
 impl Display for Error {

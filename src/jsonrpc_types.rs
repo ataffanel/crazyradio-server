@@ -43,7 +43,7 @@ pub enum Results {
     GetVersion(String),
     Scan { found: Vec<u8> },
     SendPacket { acked: bool, payload: Vec<u8> },
-    Connect { connected: bool, status: String },
+    Connect { connected: bool, status: String, push: u16, pull: u16 },
     GetConnectionStatus { connected: bool, status: String },
     Disconnect,
 }

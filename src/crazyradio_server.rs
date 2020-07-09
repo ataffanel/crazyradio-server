@@ -90,7 +90,7 @@ impl CrazyradioServer {
                 }
                 self.connections.remove(&(channel, address));
 
-                let connection = Connection::new(self.radio.clone(), channel, address);
+                let connection = Connection::new(self.radio.clone(), channel, address)?;
 
                 let (connected, status) = match connection.status() {
                     ConnectionStatus::Connecting => (false, "Connecting".to_string()),
@@ -100,9 +100,16 @@ impl CrazyradioServer {
                     }
                 };
 
+                let (pull_port, push_port) = connection.get_zmq_ports();
+
                 self.connections.insert((channel, address), connection);
 
-                Results::Connect { connected, status }
+                Results::Connect {
+                    connected,
+                    status,
+                    push: pull_port,
+                    pull: push_port,
+                }
             }
             Methods::GetConnectionStatus { channel, address } => {
                 let channel = Channel::from_number(channel)?;

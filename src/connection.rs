@@ -1,11 +1,13 @@
 // Connection handling code
-use crate::error::Result;
+use crate::error::{Result, Error};
 use crate::radio_thread::RadioThread;
 use crazyradio::Channel;
 use crossbeam_utils::sync::{WaitGroup, ShardedLock};
 use std::sync::Arc;
 use std::sync::RwLock;
 use std::time;
+use rand;
+use rand::Rng;
 
 #[derive(Clone, Debug)]
 pub enum ConnectionStatus {
@@ -18,10 +20,27 @@ pub struct Connection {
     status: Arc<RwLock<ConnectionStatus>>,
     disconnect: Arc<ShardedLock<bool>>,
     thread: std::thread::JoinHandle<()>,
+    push_port: u16,
+    pull_port: u16,
+}
+
+fn bind_zmq_on_random_port(socket: &zmq::Socket) -> Result<u16> {
+    let n_try = 10;
+    
+    for _ in 0..n_try {
+        let port = rand::thread_rng().gen_range(49152, 65535);
+
+        match socket.bind(&format!("tcp://*:{}", port)) {
+            Ok(_) => return Ok(port),
+            _ => continue,
+        }
+    }
+
+    Err(Error::ServerError("Cannot bind TCP port for connection".to_string()))
 }
 
 impl Connection {
-    pub fn new(radio: RadioThread, channel: Channel, address: [u8; 5]) -> Connection {
+    pub fn new(radio: RadioThread, channel: Channel, address: [u8; 5]) -> Result<Connection> {
         let status = Arc::new(RwLock::new(ConnectionStatus::Connecting));
         let disconnect = Arc::new(ShardedLock::new(false));
 
@@ -31,8 +50,8 @@ impl Connection {
         let socket_push = context.socket(zmq::PUSH).unwrap();
         let socket_pull = context.socket(zmq::PULL).unwrap();
 
-        socket_push.bind("tcp://*:7700").unwrap();
-        socket_pull.bind("tcp://*:7701").unwrap();
+        let push_port = bind_zmq_on_random_port(&socket_push)?;
+        let pull_port = bind_zmq_on_random_port(&socket_pull)?;
 
         let connection_initialized = WaitGroup::new();
 
@@ -57,7 +76,13 @@ impl Connection {
         // Wait for, either, the connection being established or failed initialization
         connection_initialized.wait();
 
-        Connection { status, disconnect, thread }
+        Ok(Connection {
+            status,
+            disconnect,
+            thread,
+            push_port,
+            pull_port,
+        })
     }
 
     pub fn status(&self) -> ConnectionStatus {
@@ -68,6 +93,10 @@ impl Connection {
         *self.disconnect.write().unwrap() = true;
         println!("Closing the connection!");
         self.thread.join().unwrap();
+    }
+
+    pub fn get_zmq_ports(&self) -> (u16, u16) {
+        (self.pull_port, self.push_port)
     }
 }
 
