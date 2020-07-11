@@ -1,4 +1,4 @@
-name: Linux
+name: Rust
 
 on:
   push:
@@ -10,8 +10,7 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  build:
-
+  build_linux:
     runs-on: ubuntu-latest
 
     steps:
@@ -25,3 +24,16 @@ jobs:
       with:
         name: crazyradio-server_linux_amd64
         path: target/release/crazyradio-server
+  
+  build_windows:
+    runs-on: windows-2019
+    
+    steps:
+    - uses: actions/checkout@v2
+    - name: Build
+      run: cargo build --release
+    - name: Upload a Build Artifact
+      uses: actions/upload-artifact@v2
+      with:
+        name: crazyradio-server_windows
+        path: target/release/crazyradio-server.exe
