@@ -37,3 +37,16 @@ jobs:
       with:
         name: crazyradio-server_windows
         path: target/release/crazyradio-server.exe
+
+  build_mac:
+    runs-on: macos-10.15
+    
+    steps:
+    - uses: actions/checkout@v2
+    - name: Build
+      run: cargo build --release
+    - name: Upload a Build Artifact
+      uses: actions/upload-artifact@v2
+      with:
+        name: crazyradio-server_macos
+        path: target/release/crazyradio-server
