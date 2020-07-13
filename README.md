@@ -10,8 +10,8 @@ Functionalities:
 - Connection uses *Safelink* for lossless communication and exposes uplink/downling as a couple of ZMQ PUSH/PULL sockets transmitting raw CRTP packets
 - Any number of connections is handled, they are scheduled in a round-robin manner.
 
-Not (yet) implemented:
+Limitations:
 
 - The datarate is fixed at 2Mbps
 - No broadcast transmition
-- Currently only opens the first found Crazyradio, no command line arguments implemented yet.
+- Serves only one radio, if many radio needs to be served the server can be run multiple times serving each radios on different ports
