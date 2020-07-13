@@ -1,4 +1,5 @@
 use serde::{Deserialize, Serialize};
+use crazyradio::Channel;
 
 #[derive(Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -6,30 +7,30 @@ use serde::{Deserialize, Serialize};
 pub enum Methods {
     GetVersion,
     Scan {
-        start: u8,
-        stop: u8,
+        start: Channel,
+        stop: Channel,
         #[serde(default = "default_address")]
         address: [u8; 5],
         payload: Vec<u8>,
     },
     SendPacket {
-        channel: u8,
+        channel: Channel,
         #[serde(default = "default_address")]
         address: [u8; 5],
         payload: Vec<u8>,
     },
     Connect {
-        channel: u8,
+        channel: Channel,
         #[serde(default = "default_address")]
         address: [u8; 5],
     },
     GetConnectionStatus {
-        channel: u8,
+        channel: Channel,
         #[serde(default = "default_address")]
         address: [u8; 5],
     },
     Disconnect {
-        channel: u8,
+        channel: Channel,
         #[serde(default = "default_address")]
         address: [u8; 5],
     },
@@ -44,7 +45,7 @@ fn default_address() -> [u8; 5] {
 pub enum Results {
     GetVersion(String),
     Scan {
-        found: Vec<u8>,
+        found: Vec<Channel>,
     },
     SendPacket {
         acked: bool,

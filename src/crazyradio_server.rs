@@ -57,15 +57,15 @@ impl CrazyradioServer {
                 address,
                 payload,
             } => {
-                let result = self.radio.scan(
-                    Channel::from_number(start)?,
-                    Channel::from_number(stop)?,
+                let found = self.radio.scan(
+                    start,
+                    stop,
                     address,
                     payload,
                 )?;
 
                 Results::Scan {
-                    found: result.into_iter().map(|ch| ch.into()).collect(),
+                    found
                 }
             }
             Methods::SendPacket {
@@ -75,7 +75,7 @@ impl CrazyradioServer {
             } => {
                 let (ack, payload) =
                     self.radio
-                        .send_packet(Channel::from_number(channel)?, address, payload)?;
+                        .send_packet(channel, address, payload)?;
 
                 Results::SendPacket {
                     acked: ack.received,
@@ -83,8 +83,6 @@ impl CrazyradioServer {
                 }
             }
             Methods::Connect { channel, address } => {
-                let channel = Channel::from_number(channel)?;
-
                 if let Some(connection) = self.connections.get(&(channel, address)) {
                     if !matches!(connection.status(), ConnectionStatus::Disconnected(_)) {
                         return Err(crate::error::Error::ArgumentError(format!(
@@ -116,7 +114,6 @@ impl CrazyradioServer {
                 }
             }
             Methods::GetConnectionStatus { channel, address } => {
-                let channel = Channel::from_number(channel)?;
                 if let Some(connection) = self.connections.get(&(channel, address)) {
                     let (connected, status) = match connection.status() {
                         ConnectionStatus::Connecting => (false, "Connecting".to_string()),
@@ -136,7 +133,6 @@ impl CrazyradioServer {
                 }
             }
             Methods::Disconnect { channel, address } => {
-                let channel = Channel::from_number(channel)?;
                 if let Some(connection) = self.connections.remove(&(channel, address)) {
                     connection.disconnect();
 
