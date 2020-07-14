@@ -6,8 +6,10 @@ mod radio_thread;
 
 use crate::crazyradio_server::CrazyradioServer;
 use crate::error::Result;
+use clap::{crate_authors, crate_version, Clap};
 use crazyradio::Crazyradio;
-use clap::{Clap, crate_version, crate_authors};
+
+use log::info;
 
 /// By default, opens the first Crazyradio (ie. equivalent to `--nth 0`)
 #[derive(Clap)]
@@ -25,10 +27,25 @@ struct Opts {
     /// Listening port for the REQ ZMQ socket
     #[clap(short, long, default_value = "7777")]
     port: u32,
+    /// Print info logs. Use twice to log debug messages.
+    #[clap(short, long, parse(from_occurrences))]
+    verbose: u32,
 }
 
 fn main() -> Result<()> {
     let opts = Opts::parse();
+
+    // Set log level from command line option unless RUST_LOG is already set
+    if std::env::var_os("RUST_LOG").is_none() {
+        let log_level = match opts.verbose {
+            0 => "warn",
+            1 => "info",
+            _ => "debug",
+        };
+        std::env::set_var("RUST_LOG", log_level);
+    }
+
+    pretty_env_logger::init();
 
     if opts.list {
         let list = Crazyradio::list_serials()?;
@@ -46,9 +63,9 @@ fn main() -> Result<()> {
         Crazyradio::open_first()?
     };
 
-    println!("Opened Crazyradio with serial number {}", cr.serial()?);
+    info!("Opened Crazyradio with serial number {}", cr.serial()?);
 
-    println!("Serving a ØMQ REP socker on port {}...", opts.port);
+    info!("Serving a ØMQ REP socker on port {}...", opts.port);
     let context = zmq::Context::new();
     let mut server = CrazyradioServer::new(cr, context, opts.port);
     server.run();

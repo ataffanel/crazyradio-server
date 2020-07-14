@@ -57,25 +57,16 @@ impl CrazyradioServer {
                 address,
                 payload,
             } => {
-                let found = self.radio.scan(
-                    start,
-                    stop,
-                    address,
-                    payload,
-                )?;
+                let found = self.radio.scan(start, stop, address, payload)?;
 
-                Results::Scan {
-                    found
-                }
+                Results::Scan { found }
             }
             Methods::SendPacket {
                 channel,
                 address,
                 payload,
             } => {
-                let (ack, payload) =
-                    self.radio
-                        .send_packet(channel, address, payload)?;
+                let (ack, payload) = self.radio.send_packet(channel, address, payload)?;
 
                 Results::SendPacket {
                     acked: ack.received,

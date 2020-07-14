@@ -3,6 +3,7 @@ use crate::error::{Error, Result};
 use crate::radio_thread::RadioThread;
 use crazyradio::Channel;
 use crossbeam_utils::sync::{ShardedLock, WaitGroup};
+use log::{debug, info, warn};
 use rand;
 use rand::Rng;
 use std::sync::Arc;
@@ -93,7 +94,7 @@ impl Connection {
 
     pub fn disconnect(self) {
         *self.disconnect.write().unwrap() = true;
-        println!("Closing the connection!");
+        debug!("Closing the connection!");
         self.thread.join().unwrap();
     }
 
@@ -138,7 +139,7 @@ impl ConnectionThread {
     }
 
     fn update_status(&self, new_status: ConnectionStatus) {
-        println!("{:?}", &new_status);
+        debug!("New status: {:?}", &new_status);
         let mut status = self.status.write().unwrap();
         *status = new_status;
     }
@@ -183,6 +184,8 @@ impl ConnectionThread {
     }
 
     fn run(&mut self, connection_initialized: WaitGroup) -> Result<()> {
+        info!("Connecting to {:?}/{:X?} ...", self.channel, self.address);
+
         // Try to initialize safelink
         // This server only supports safelink, if it cannot be enabled
         // the Crazyflie is deemed not connectable
@@ -190,6 +193,10 @@ impl ConnectionThread {
             self.update_status(ConnectionStatus::Disconnected(
                 "Cannot initialize connection".to_string(),
             ));
+            warn!(
+                "Cannot initialize connection with {:?}/{:X?}",
+                self.channel, self.address
+            );
             return Ok(());
         }
 
@@ -197,9 +204,13 @@ impl ConnectionThread {
         self.update_status(ConnectionStatus::Connected);
         drop(connection_initialized);
 
+        info!("Connected to {:?}/{:X?}", self.channel, self.address);
+
         // Wait for push connection to be active?
         self.socket_push.send(vec![0xff], 0)?;
         self.socket_push.set_sndtimeo(10).unwrap();
+
+        debug!("Zmq PUSH socket connected, starting communication loop");
 
         // Communication loop ...
         let mut last_pk_time = time::Instant::now();
@@ -232,6 +243,7 @@ impl ConnectionThread {
                     relax_timeout_ms = 10;
                 }
             } else {
+                debug!("Lost packet!");
                 needs_resend = true;
             }
 
@@ -239,6 +251,10 @@ impl ConnectionThread {
                 self.update_status(ConnectionStatus::Disconnected(
                     "Disconnect requested".to_string(),
                 ));
+                info!(
+                    "Closing connection to {:?}/{:X?} as requested",
+                    self.channel, self.address
+                );
                 return Ok(());
             }
         }
@@ -246,6 +262,11 @@ impl ConnectionThread {
         self.update_status(ConnectionStatus::Disconnected(
             "Connection timeout".to_string(),
         ));
+
+        warn!(
+            "Connection to {:?}/{:X?} lost (timeout)",
+            self.channel, self.address
+        );
 
         Ok(())
     }
