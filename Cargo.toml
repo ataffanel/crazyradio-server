@@ -1,6 +1,6 @@
 [package]
 name = "crazyradio-server"
-version = "0.1.1"
+version = "0.2.0"
 authors = ["Arnaud Taffanel <arnaud@taffanel.org>"]
 edition = "2018"
 
@@ -11,9 +11,10 @@ crazyradio = { version = "0.1.4", features = ["serde_support"] }
 zmq = { version = "0.9.2", features = ["vendored"] }
 serde_json = "1.0"
 serde = { version = "1.0", features = ["derive"] }
-crossbeam-channel = "0.4"
-crossbeam-utils = "0.7"
-rand="0.7"
+crossbeam-channel = "0.5"
+crossbeam-utils = "0.8"
+rand="0.8"
 clap="3.0.0-beta.1"
 log = "0.4"
 pretty_env_logger = "0.4"
+crazyflie-link = { version = "*", git = "https://github.com/ataffanel/crazyflie-link-rs", rev = "7822461c20f97e6c" }

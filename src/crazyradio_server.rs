@@ -3,18 +3,18 @@
 use crate::connection::{Connection, ConnectionStatus};
 use crate::error::Result;
 use crate::jsonrpc_types::{Methods, Request, Response, ResponseBody, Results};
-use crate::radio_thread::RadioThread;
-use crazyradio::{Channel, Crazyradio};
 use std::collections::HashMap;
+use crazyflie_link::LinkContext;
+use log::debug;
 
 pub struct CrazyradioServer {
     socket: zmq::Socket,
-    radio: RadioThread,
-    connections: HashMap<(Channel, [u8; 5]), Connection>,
+    link_context: LinkContext,
+    connections: HashMap<String, Connection>,
 }
 
 impl CrazyradioServer {
-    pub fn new(crazyradio: Crazyradio, context: zmq::Context, port: u32) -> Self {
+    pub fn new(link_context: LinkContext, context: zmq::Context, port: u32) -> Self {
         // Create and bind ZMQ socket
         let socket = context.socket(zmq::REP).unwrap();
         let listenning_uri = format!("tcp://*:{}", port);
@@ -22,15 +22,12 @@ impl CrazyradioServer {
             .bind(&listenning_uri)
             .expect(&format!("failed listenning on {}", listenning_uri));
 
-        // Launch radio thread
-        let radio = RadioThread::new(crazyradio);
-
         // No connections for now
         let connections = HashMap::new();
 
         CrazyradioServer {
             socket,
-            radio,
+            link_context,
             connections,
         }
     }
@@ -52,41 +49,28 @@ impl CrazyradioServer {
                 Results::GetVersion(version)
             }
             Methods::Scan {
-                start,
-                stop,
                 address,
-                payload,
             } => {
-                let found = self.radio.scan(start, stop, address, payload)?;
+                let found = self.link_context.scan(address)?;
 
                 Results::Scan { found }
             }
-            Methods::SendPacket {
-                channel,
-                address,
-                payload,
-            } => {
-                let (ack, payload) = self.radio.send_packet(channel, address, payload)?;
-
-                Results::SendPacket {
-                    acked: ack.received,
-                    payload: payload,
-                }
-            }
-            Methods::Connect { channel, address } => {
-                if let Some(connection) = self.connections.get(&(channel, address)) {
+            Methods::Connect { uri } => {
+                if let Some(connection) = self.connections.get(&uri) {
                     if !matches!(connection.status(), ConnectionStatus::Disconnected(_)) {
+                        dbg!(connection.status());
                         return Err(crate::error::Error::ArgumentError(format!(
                             "Connection already active!"
                         )));
                     }
                 }
-                self.connections.remove(&(channel, address));
 
-                let connection = Connection::new(self.radio.clone(), channel, address)?;
+                self.connections.remove(&uri);
+
+                let link = self.link_context.open_link(&uri)?;
+                let connection = Connection::new(link)?;
 
                 let (connected, status) = match connection.status() {
-                    ConnectionStatus::Connecting => (false, "Connecting".to_string()),
                     ConnectionStatus::Connected => (true, "Connected".to_string()),
                     ConnectionStatus::Disconnected(message) => {
                         (false, format!("Disconnected: {}", message))
@@ -95,7 +79,7 @@ impl CrazyradioServer {
 
                 let (pull_port, push_port) = connection.get_zmq_ports();
 
-                self.connections.insert((channel, address), connection);
+                self.connections.insert(uri, connection);
 
                 Results::Connect {
                     connected,
@@ -104,10 +88,9 @@ impl CrazyradioServer {
                     pull: push_port,
                 }
             }
-            Methods::GetConnectionStatus { channel, address } => {
-                if let Some(connection) = self.connections.get(&(channel, address)) {
+            Methods::GetConnectionStatus { uri } => {
+                if let Some(connection) = self.connections.get(&uri) {
                     let (connected, status) = match connection.status() {
-                        ConnectionStatus::Connecting => (false, "Connecting".to_string()),
                         ConnectionStatus::Connected => (true, "Connected".to_string()),
                         ConnectionStatus::Disconnected(message) => {
                             (false, format!("Disconnected: {}", message))
@@ -116,23 +99,21 @@ impl CrazyradioServer {
 
                     Results::GetConnectionStatus { connected, status }
                 } else {
-                    let channel: u8 = channel.into();
                     return Err(crate::error::Error::ArgumentError(format!(
-                        "Connection does not exist for channel {}",
-                        channel
+                        "Connection does not exist for uri {}",
+                        &uri
                     )));
                 }
             }
-            Methods::Disconnect { channel, address } => {
-                if let Some(connection) = self.connections.remove(&(channel, address)) {
+            Methods::Disconnect { uri } => {
+                if let Some(connection) = self.connections.remove(&uri) {
                     connection.disconnect();
 
                     Results::Disconnect
                 } else {
-                    let channel: u8 = channel.into();
                     return Err(crate::error::Error::ArgumentError(format!(
-                        "Connection does not exist for channel {}",
-                        channel
+                        "Connection does not exist for uri {}",
+                        uri
                     )));
                 }
             }
@@ -160,6 +141,8 @@ impl CrazyradioServer {
                 .unwrap();
             }
         };
+
+        debug!("Handling request: {:#?}", request);
 
         // Execute request, generate a response_body
         let body = self.run_method(request.method).map_or_else(

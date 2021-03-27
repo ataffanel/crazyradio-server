@@ -9,6 +9,7 @@ pub enum Error {
     ZmqError(zmq::Error),
     ArgumentError(String),
     ServerError(String),
+    LinkError(crazyflie_link::Error),
 }
 
 impl Display for Error {
@@ -32,5 +33,11 @@ impl From<crazyradio::Error> for Error {
 impl From<zmq::Error> for Error {
     fn from(error: zmq::Error) -> Self {
         Error::ZmqError(error)
+    }
+}
+
+impl From<crazyflie_link::Error> for Error {
+    fn from(error: crazyflie_link::Error) -> Self {
+        Error::LinkError(error)
     }
 }
