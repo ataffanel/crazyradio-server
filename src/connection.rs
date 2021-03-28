@@ -18,7 +18,7 @@ pub enum ConnectionStatus {
 pub struct Connection {
     status: Arc<RwLock<ConnectionStatus>>,
     stop: Arc<RwLock<bool>>,
-    link: Arc<crazyflie_link::Connection>,
+    _link: Weak<crazyflie_link::Connection>,
     tx_thread: std::thread::JoinHandle<()>,
     rx_thread: std::thread::JoinHandle<()>,
     push_port: u16,
@@ -60,7 +60,7 @@ impl Connection {
 
         let connection_initialized = WaitGroup::new();
 
-        let tx_link = Arc::downgrade(&link);
+        let tx_link = link.clone();
         let tx_status = status.clone();
         let tx_stop = stop.clone();
         let tx_thread = std::thread::spawn(move || match tx_loop(tx_link, socket_pull, tx_stop) {
@@ -70,7 +70,7 @@ impl Connection {
             }
         });
 
-        let rx_link = Arc::downgrade(&link);
+        let rx_link = link.clone();
         let rx_status = status.clone();
         let rx_stop = stop.clone();
         let rx_thread = std::thread::spawn(move || match rx_loop(rx_link, socket_push, rx_stop) {
@@ -86,7 +86,7 @@ impl Connection {
         Ok(Connection {
             status,
             stop,
-            link,
+            _link: Arc::downgrade(&link),
             tx_thread,
             rx_thread,
             push_port,
@@ -100,7 +100,6 @@ impl Connection {
 
     pub fn disconnect(self) {
         *self.stop.write().unwrap() = true;
-        drop(self.link);
         debug!("Closing the connection!");
         self.tx_thread.join().unwrap();
         self.rx_thread.join().unwrap();
@@ -111,47 +110,45 @@ impl Connection {
     }
 }
 
-fn rx_loop(rx_link: Weak<crazyflie_link::Connection>, push_socket: Socket, stop: Arc<RwLock<bool>>) -> Result<()> {
-    push_socket.set_sndtimeo(100)?;
-    loop {
-        if *stop.read().unwrap() {
-            return Ok(())
-        }
+fn rx_loop(rx_link: Arc<crazyflie_link::Connection>, push_socket: Socket, stop: Arc<RwLock<bool>>) -> Result<()> {
+    // Setup a quite long timeout on the push socket. If this timeout is reached, the connection is dropped.
+    // This leaves a confortable time to the client to starts the socket, while making sure we will not
+    // have a connection hanging if a client crash or misbehave.
+    // A keepalive empty packet is sent every seconds in case there is no trafic from the Crazyflie
+    push_socket.set_sndtimeo(1000)?;
+    
+    while *stop.read().unwrap() == false {
+        let packet: Vec<u8> = match rx_link.recv_packet_timeout(Duration::from_millis(1000))? {
+            Some(packet) => packet.into(),
+            None => Vec::new(),
+        };
 
-        if let Some(link) = rx_link.upgrade() {
-            let packet: Vec<u8> = match link.recv_packet_timeout(Duration::from_millis(100))? {
-                Some(packet) => packet.into(),
-                None => continue,
-            };
-
-            match push_socket.send(packet, 0) {
-                Ok(()) => (),
-                Err(zmq::Error::EAGAIN) => continue,
-                Err(e) => return Err(e.into()),
-            }
-        } else {
-            return Ok(());
+        match push_socket.send(packet, 0) {
+            Ok(()) => (),
+            Err(zmq::Error::EAGAIN) => {
+                *stop.write().unwrap() = true;
+                return Err(Error::ServerError("ZMQ socket timeout".to_string()));
+            },
+            Err(e) => return Err(e.into()),
         }
     }
+
+    Ok(())
 }
 
-fn tx_loop(tx_link: Weak<crazyflie_link::Connection>, pull_socket: Socket, stop: Arc<RwLock<bool>>) -> Result<()> {
+fn tx_loop(tx_link: Arc<crazyflie_link::Connection>, pull_socket: Socket, stop: Arc<RwLock<bool>>) -> Result<()> {
+    // Setup a timeout on zmq pull to make sure the loop checks 'stop' at regular interval
     pull_socket.set_rcvtimeo(100)?;
-    loop {
-        if *stop.read().unwrap() {
-            return Ok(())
-        }
 
-        if let Some(link) = tx_link.upgrade() {
-            let packet = match pull_socket.recv_bytes(0) {
-                Ok(packet) => packet,
-                Err(zmq::Error::EAGAIN) => continue,
-                Err(e) => return Err(e.into()),
-            };
+    while *stop.read().unwrap() == false {
+        let packet = match pull_socket.recv_bytes(0) {
+            Ok(packet) => packet,
+            Err(zmq::Error::EAGAIN) => continue,
+            Err(e) => return Err(e.into()),
+        };
 
-            link.send_packet(packet.into())?;
-        } else {
-            return Ok(());
-        }
+        tx_link.send_packet(packet.into())?;
     }
+
+    Ok(())
 }
