@@ -44,7 +44,12 @@ fn main() -> Result<()> {
 
     let link_context = LinkContext::new();
 
-    info!("Serving a ØMQ REP socker on port {}...", opts.port);
+    println!(" ========================== ");
+    println!("|    Crazyradio Server     |");
+    println!(" ========================== ");
+    println!();
+
+    info!("Serving a ØMQ REP socket on port {}...", opts.port);
     let context = zmq::Context::new();
     let mut server = CrazyradioServer::new(link_context, context, opts.port);
     server.run();
