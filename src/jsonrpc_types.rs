@@ -9,6 +9,9 @@ pub enum Methods {
         #[serde(default = "default_address")]
         address: [u8; 5],
     },
+    ScanSelected {
+        uris: Vec<String>,
+    },
     Connect {
         uri: String,
     },
@@ -29,6 +32,9 @@ fn default_address() -> [u8; 5] {
 pub enum Results {
     GetVersion(String),
     Scan {
+        found: Vec<String>,
+    },
+    ScanSelected {
         found: Vec<String>,
     },
     Connect {

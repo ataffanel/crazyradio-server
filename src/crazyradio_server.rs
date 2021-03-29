@@ -54,7 +54,15 @@ impl CrazyradioServer {
                 let found = self.link_context.scan(address)?;
 
                 Results::Scan { found }
-            }
+            },
+            Methods::ScanSelected {
+                uris,
+            } => {
+                let uris = uris.iter().map(String::as_str).collect();
+                let found = self.link_context.scan_selected(uris)?;
+
+                Results::ScanSelected{ found }
+            },
             Methods::Connect { uri } => {
                 if let Some(connection) = self.connections.get(&uri) {
                     if !matches!(connection.status(), ConnectionStatus::Disconnected(_)) {
